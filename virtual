@@ -1,0 +1,830 @@
+# VIRTUAL(5)                                                          VIRTUAL(5)
+# 
+# NAME
+#        virtual - Postfix virtual alias table format
+# 
+# SYNOPSIS
+#        postmap /etc/postfix/virtual
+# 
+#        postmap -q "string" /etc/postfix/virtual
+# 
+#        postmap -q - /etc/postfix/virtual <inputfile
+# 
+# DESCRIPTION
+#        The  optional  virtual(5)  alias  table rewrites recipient
+#        addresses for all local, all virtual, and all remote  mail
+#        destinations.   This  is unlike the aliases(5) table which
+#        is used only for local(8) delivery.  Virtual  aliasing  is
+#        recursive,  and  is  implemented by the Postfix cleanup(8)
+#        daemon before mail is queued.
+# 
+#        The main applications of virtual aliasing are:
+# 
+#        o      To redirect mail for one address  to  one  or  more
+#               addresses.
+# 
+#        o      To   implement  virtual  alias  domains  where  all
+#               addresses  are  aliased  to  addresses   in   other
+#               domains.
+# 
+#               Virtual  alias  domains are not to be confused with
+#               the virtual mailbox domains  that  are  implemented
+#               with  the  Postfix  virtual(8) mail delivery agent.
+#               With  virtual  mailbox  domains,   each   recipient
+#               address can have its own mailbox.
+# 
+#        Virtual  aliasing  is  applied  only to recipient envelope
+#        addresses, and  does  not  affect  message  headers.   Use
+#        canonical(5)   mapping  to  rewrite  header  and  envelope
+#        addresses in general.
+# 
+#        Normally, the virtual(5) alias table  is  specified  as  a
+#        text  file that serves as input to the postmap(1) command.
+#        The result, an indexed file in dbm or db format,  is  used
+#        for fast searching by the mail system. Execute the command
+#        "postmap /etc/postfix/virtual" to rebuild an indexed  file
+#        after changing the corresponding text file.
+# 
+#        When  the  table  is provided via other means such as NIS,
+#        LDAP or SQL, the same lookups are  done  as  for  ordinary
+#        indexed files.
+# 
+#        Alternatively,  the  table  can  be provided as a regular-
+#        expression map where patterns are given as regular expres-
+#        sions,  or lookups can be directed to TCP-based server. In
+#        those case, the lookups are done in a  slightly  different
+#        way  as  described below under "REGULAR EXPRESSION TABLES"
+#        or "TCP-BASED TABLES".
+# 
+# CASE FOLDING
+#        The search string is folded to lowercase  before  database
+#        lookup.  As  of Postfix 2.3, the search string is not case
+#        folded with database types such as regexp: or pcre:  whose
+#        lookup fields can match both upper and lower case.
+# 
+# TABLE FORMAT
+#        The input format for the postmap(1) command is as follows:
+# 
+#        pattern result
+#               When pattern matches a mail address, replace it  by
+#               the corresponding result.
+# 
+#        blank lines and comments
+#               Empty  lines and whitespace-only lines are ignored,
+#               as are lines whose first  non-whitespace  character
+#               is a `#'.
+# 
+#        multi-line text
+#               A  logical  line starts with non-whitespace text. A
+#               line that starts with whitespace continues a  logi-
+#               cal line.
+# 
+# TABLE SEARCH ORDER
+#        With lookups from indexed files such as DB or DBM, or from
+#        networked tables such as NIS, LDAP or  SQL,  patterns  are
+#        tried in the order as listed below:
+# 
+#        user@domain address, address, ...
+#               Redirect  mail  for  user@domain  to address.  This
+#               form has the highest precedence.
+# 
+#        user address, address, ...
+#               Redirect mail for user@site to address when site is
+#               equal  to $myorigin, when site is listed in $mydes-
+#               tination, or when it is listed in  $inet_interfaces
+#               or $proxy_interfaces.
+# 
+#               This  functionality  overlaps with functionality of
+#               the local aliases(5) database.  The  difference  is
+#               that virtual(5) mapping can be applied to non-local
+#               addresses.
+# 
+#        @domain address, address, ...
+#               Redirect mail for other users in domain to address.
+#               This form has the lowest precedence.
+# 
+#               Note:  @domain  is a wild-card. With this form, the
+#               Postfix SMTP server accepts mail for any  recipient
+#               in  domain,  regardless  of  whether that recipient
+#               exists.  This may turn  your  mail  system  into  a
+#               backscatter  source: Postfix first accepts mail for
+#               non-existent recipients and then  tries  to  return
+#               that  mail  as  "undeliverable" to the often forged
+#               sender address.
+# 
+# RESULT ADDRESS REWRITING
+#        The lookup result is subject to address rewriting:
+# 
+#        o      When the result  has  the  form  @otherdomain,  the
+#               result  becomes the same user in otherdomain.  This
+#               works only for the first address in a multi-address
+#               lookup result.
+# 
+#        o      When  "append_at_myorigin=yes", append "@$myorigin"
+#               to addresses without "@domain".
+# 
+#        o      When "append_dot_mydomain=yes", append ".$mydomain"
+#               to addresses without ".domain".
+# 
+# ADDRESS EXTENSION
+#        When a mail address localpart contains the optional recip-
+#        ient delimiter (e.g., user+foo@domain), the  lookup  order
+#        becomes: user+foo@domain, user@domain, user+foo, user, and
+#        @domain.
+# 
+#        The  propagate_unmatched_extensions   parameter   controls
+#        whether  an  unmatched  address extension (+foo) is propa-
+#        gated to the result of table lookup.
+# 
+# VIRTUAL ALIAS DOMAINS
+#        Besides virtual aliases, the virtual alias table can  also
+#        be used to implement virtual alias domains. With a virtual
+#        alias domain,  all  recipient  addresses  are  aliased  to
+#        addresses in other domains.
+# 
+#        Virtual alias domains are not to be confused with the vir-
+#        tual mailbox domains that are implemented with the Postfix
+#        virtual(8)  mail  delivery  agent.  With  virtual  mailbox
+#        domains, each recipient address can have its own  mailbox.
+# 
+#        With  a  virtual  alias domain, the virtual domain has its
+#        own user name space. Local  (i.e.  non-virtual)  usernames
+#        are  not visible in a virtual alias domain. In particular,
+#        local aliases(5) and local mailing lists are  not  visible
+#        as localname@virtual-alias.domain.
+# 
+#        Support for a virtual alias domain looks like:
+# 
+#        /etc/postfix/main.cf:
+#            virtual_alias_maps = hash:/etc/postfix/virtual
+# 
+#        Note: some systems use dbm databases instead of hash.  See
+#        the output  from  "postconf  -m"  for  available  database
+#        types.
+# 
+#        /etc/postfix/virtual:
+#            virtual-alias.domain     anything (right-hand content does not matter)
+#            postmaster@virtual-alias.domain  postmaster
+#            user1@virtual-alias.domain       address1
+#            user2@virtual-alias.domain       address2, address3
+# 
+#        The  virtual-alias.domain anything entry is required for a
+#        virtual alias domain. Without this entry, mail is rejected
+#        with  "relay  access  denied", or bounces with "mail loops
+#        back to myself".
+# 
+#        Do not specify virtual alias domain names in  the  main.cf
+#        mydestination or relay_domains configuration parameters.
+# 
+#        With  a  virtual  alias  domain,  the  Postfix SMTP server
+#        accepts  mail  for  known-user@virtual-alias.domain,   and
+#        rejects   mail  for  unknown-user@virtual-alias.domain  as
+#        undeliverable.
+# 
+#        Instead of specifying the virtual alias  domain  name  via
+#        the  virtual_alias_maps table, you may also specify it via
+#        the main.cf virtual_alias_domains configuration parameter.
+#        This  latter parameter uses the same syntax as the main.cf
+#        mydestination configuration parameter.
+# 
+# REGULAR EXPRESSION TABLES
+#        This section describes how the table lookups  change  when
+#        the table is given in the form of regular expressions. For
+#        a description of regular expression lookup  table  syntax,
+#        see regexp_table(5) or pcre_table(5).
+# 
+#        Each  pattern  is  a regular expression that is applied to
+#        the entire address being looked up. Thus, user@domain mail
+#        addresses  are  not  broken up into their user and @domain
+#        constituent parts, nor is user+foo broken up into user and
+#        foo.
+# 
+#        Patterns  are applied in the order as specified in the ta-
+#        ble, until a pattern is  found  that  matches  the  search
+#        string.
+# 
+#        Results  are  the  same as with indexed file lookups, with
+#        the additional feature that parenthesized substrings  from
+#        the pattern can be interpolated as $1, $2 and so on.
+# 
+# TCP-BASED TABLES
+#        This  section  describes how the table lookups change when
+#        lookups are directed to a TCP-based server. For a descrip-
+#        tion of the TCP client/server lookup protocol, see tcp_ta-
+#        ble(5).  This feature is not available up to and including
+#        Postfix version 2.4.
+# 
+#        Each lookup operation uses the entire address once.  Thus,
+#        user@domain mail addresses are not broken  up  into  their
+#        user and @domain constituent parts, nor is user+foo broken
+#        up into user and foo.
+# 
+#        Results are the same as with indexed file lookups.
+# 
+# BUGS
+#        The table format does not understand quoting  conventions.
+# 
+# CONFIGURATION PARAMETERS
+#        The  following  main.cf parameters are especially relevant
+#        to this topic. See the Postfix  main.cf  file  for  syntax
+#        details  and  for default values. Use the "postfix reload"
+#        command after a configuration change.
+# 
+#        virtual_alias_maps
+#               List of virtual aliasing tables.
+# 
+#        virtual_alias_domains
+#               List of virtual alias domains. This uses  the  same
+#               syntax as the mydestination parameter.
+# 
+#        propagate_unmatched_extensions
+#               A  list  of  address rewriting or forwarding mecha-
+#               nisms that propagate an address extension from  the
+#               original  address  to  the result.  Specify zero or
+#               more  of  canonical,   virtual,   alias,   forward,
+#               include, or generic.
+# 
+#        Other parameters of interest:
+# 
+#        inet_interfaces
+#               The  network  interface  addresses that this system
+#               receives mail on.  You need to stop and start Post-
+#               fix when this parameter changes.
+# 
+#        mydestination
+#               List  of  domains  that  this mail system considers
+#               local.
+# 
+#        myorigin
+#               The domain that is appended  to  any  address  that
+#               does not have a domain.
+# 
+#        owner_request_special
+#               Give special treatment to owner-xxx and xxx-request
+#               addresses.
+# 
+#        proxy_interfaces
+#               Other interfaces that this machine receives mail on
+#               by way of a proxy agent or network address transla-
+#               tor.
+# 
+# SEE ALSO
+#        cleanup(8), canonicalize and enqueue mail
+#        postmap(1), Postfix lookup table manager
+#        postconf(5), configuration parameters
+#        canonical(5), canonical address mapping
+# 
+# README FILES
+#        Use "postconf readme_directory" or  "postconf  html_direc-
+#        tory" to locate this information.
+#        ADDRESS_REWRITING_README, address rewriting guide
+#        DATABASE_README, Postfix lookup table overview
+#        VIRTUAL_README, domain hosting guide
+# 
+# LICENSE
+#        The  Secure  Mailer  license must be distributed with this
+#        software.
+# 
+# AUTHOR(S)
+#        Wietse Venema
+#        IBM T.J. Watson Research
+#        P.O. Box 704
+#        Yorktown Heights, NY 10598, USA
+# 
+#                                                                     VIRTUAL(5)
+#
+#
+# Unidades
+adm.carrao@apetece.com.br apt_adm.carrao
+#
+#
+#
+#
+#apetece.org@apetece.com.br apt_organizacao
+corporativo@apetece.com.br apt_corporativo
+ronaldo@apetece.com.br apt_informatica
+antivirus@apetece.com.br apt_virus
+unidades@apetece.com.br apt_unidade
+kitlanche@apetece.com.br apt_kitlancheped
+sackitlanche@apetece.com.br apt_kitlancheaten
+#diadema@apetece.com.br apt_caps
+#saudesbc@apetece.com.br apt_saudesbc
+#transportadas@apetece.com.br  apt_caps
+#sacdiadema@apetece.com.br apt_capsaten
+#sacsaudesbc@apetece.com.br apt_capsaten
+#sactransportadas@apetece.com.br  apt_capsaten
+saude.maua@apetece.com.br apt_maua
+jornal@apetece.com.br sfaureliano
+pcdescentralizado@apetece.com.br apt_pcdecen
+beatriz.lima@apetece.com.br limabe01
+apetece@apetece.com.br apt_comercial
+controladoria@apetece.com.br apt_controladoria
+contabilidade@apetece.com.br apt_controladoria
+fiscal@apetece.com.br apt_fiscal
+qualidade@apetece.com.br apt_gqualidade
+compras@apetece.com.br apt_compras
+diretoria@apetece.com.br apt_diretoria
+estoque@apetece.com.br apt_estoque
+grupo.operacional@apetece.com.br apt_goperacional
+operacional@apetece.com.br apt_operacional
+pcp@apetece.com.br apt_pcp
+transporte@apetece.com.br apt_transporte
+infra@apetece.com.br apt_infra
+comercial@apetece.com.br apt_comercial
+contato@apetece.com.br apt_contatosite
+fornecedores@apetece.com.br loliveira
+administracao@apetece.com.br apt_administracao
+financeiro@apetece.com.br apt_financeiro
+informatica@apetece.com.br apt_informatica
+cozinha@apetece.com.br apt_cozinha
+#producao@apetece.com.br apt_cozinha
+acougue@apetece.com.br apt_acougue
+clientes@apetece.com.br apt_clientes
+sgi@apetece.com.br apt_sgi
+supervisao@apetece.com.br apt_supervisao
+coordenacao@apetece.com.br apt_supervisao
+manutencao@apetece.com.br apt_manutencao
+manutencaoescolas@apetece.com.br apt_manutescolas
+supply@apetece.com.br apt_supply
+nfe@apetece.com.br nfe_apetece
+silvana.rodrigues@apetece.com.br srrodrigues
+recepcao@apetece.com.br recepcao
+eunice.silva@apetece.com.br silvae02
+erika.eiko@apetece.com.br eematsuoka
+tiago.silva@apetece.com.br tmsilva
+cristina.peres@apetece.com.br peresc01
+thiago.santos@apetece.com.br tsrsantos
+amanda.mantovani@apetece.com.br apt_gqualidade
+gtp@apetece.com.br apt_gtp
+caroot@apetece.com.br caroot
+#suporte@apetece.com.br apt_gtp
+alvarenga@apetece.com.br hp_alvarenga
+heliopolis@apetece.com.br hp_heliopolis
+saboya@apetece.com.br hp_saboya
+#osasco_regional@apetece.com.br hp_oscregional
+#nutri_regional@apetece.com.br nutri_regional
+#osasco_sul@apetece.com.br hp_oscsul
+osasco_norte@apetece.com.br hp_oscnorte
+upa_atibaia@apetece.com.br upa_atibaia
+jonh.moura@apetece.com.br jlsmoura
+adriana.alves@apetece.com.br acalves
+#silvia.schulze@apetece.com.br sbschulze
+tecnicas@apetece.com.br nutric01
+gilson.batista@apetece.com.br asconde
+#wessel.silva@apetece.com.br silvaw01
+fran.oliveira@apetece.com.br faoliveira
+expedicao@apetece.com.br pt_expedicao
+nutri.cozinha@apetece.com.br nutric02
+ligia.santandrea@apetece.com.br fbtorquato 
+#carolina.castro@apetece.com.br cfrcastro
+licelia.borelli@apetece.com.br acalves
+atendimento@apetece.com.br apt_atendimento
+daniela.albuquerque@apetece.com.br dralbuquerque
+#montenegro@apetece.com.br hp_bmnegro
+juridico@apetece.com.br apt_juridico
+patrulheiro_estoque@apetece.com.br estoque
+luis.botelho@apetece.com.br botell01
+victor.santos@apetece.com.br vdsantos
+robson.mendes@apetece.com.br mender01
+#gimena.santos@apetece.com.br gisantos
+merenda@apetece.com.br apt_merenda
+alessandra.conde@apetece.com.br asconde
+#ana.ruediger@apetece.com.br abruediger
+#luciane.crippa@apetece.com.br lcavalheiro
+#drarnaldo.colonos@apetece.com.br hp_drarnaldo
+elvis.sousa@apetece.com.br ebsousa
+#wendell.morais@apetece.com.br wsmorais
+#stamptec@apetece.com.br apt_stamptec
+danilo.pereira@apetece.com.br apt_infra
+recebimento@apetece.com.br apt_recebimento
+faturamento@apetece.com.br apt_faturamento
+thais.tanelli@apetece.com.br thtanelli
+#rodrigo.oliveira@apetece.com.br rroliveira
+patrulheiro_expedicao@apetece.com.br pt_expedicao
+#caism@apetece.com.br apt_caism
+eduardo.malfim@apetece.com.br apt_compras
+#christiane.almeida@apetece.com.br csalmeida
+#jonathan.santos@apetece.com.br nssantos
+natanael.santos@apetece.com.br nssantos
+patrulheiro_logistica@apetece.com.br fgsantos
+#pedro.peres@apetece.com.br pperes
+pslapa@apetece.com.br hp_lapa
+patrulheiro_gq@apetece.com.br pt_gq
+debora.silva@apetece.com.br dlrsilva
+psgomes_mattos@apetece.com.br hp_gomesmattos
+washington.fogaca@apetece.com.br wjfogaca
+sabrina.aureliano@apetece.com.br sfaureliano
+eleny.nascimento@apetece.com.br mgomes
+#rogerio.scarpelini@apetece.com.br rscarpelini
+#paula.lelis@apetece.com.br apelelis
+#pscentral_sbc@apetece.com.br pscentral_sbc
+#hp_hmusbc@apetece.com.br hp_hmusbc
+#hp_anchieta@apetece.com.br hp_anchieta
+#hp.anchieta.nutricao@apetece.com.br hp_anchieta_nutri
+desenvolvimento.rh@apetece.com.br rh-apetece
+ricardo.bastos@apetece.com.br rbastos
+#wegpaumar@apetece.com.br wegpaumar
+fabia.silva@apetece.com.br fcsilva
+#francisco.silva@apetece.com.br fmsilva
+lygia.torres@apetece.com.br lftorres
+basilio.fambrini@apetece.com.br bfambrini
+unidadediadema@apetece.com.br diadema
+daniel.silva@apetece.com.br dwsilva
+elizete.alves@apetece.com.br efsalves
+fernanda.requia@apetece.com.br fprequia
+#gerson.marcolino@apetece.com.br gsmarcolino
+cristiane.araujo@apetece.com.br ctaraujo
+chrysthie.audi@apetece.com.br fprequia
+marina.romero@apetece.com.br mromero
+mikaelle.paulino@apetece.com.br mfpaulino
+#laion.frois@apetece.com.br lfbiazao
+edson.tamada@apetece.com.br ektamada
+edna.silva@apetece.com.br esilva
+#vlademir.gois@apetece.com.br vlgois
+#igor.nascimento@apetece.com.br ivnascimento
+#wtorre@apetece.com.br wtorre
+renato.goncalves@apetece.com.br rgsilva
+#luana.franca@apetece.com.br lsfranca
+cesar.romao@apetece.com.br pt_pcp 
+pt_pcp@apetece.com.br pt_pcp
+rodrigo.almeida@apetece.com.br rcalmeida
+juliana.padilhas@apetece.com.br jpadilhas
+leandro.oliveira@apetece.com.br loliveira
+renato.messias@apetece.com.br rlsilva
+rafael.oliveira@apetece.com.br rloliveira
+#lucas.anjos@apetece.com.br lbfanjos
+#thuanne.barbosa@apetece.com.br tbarbosa
+ipiranga@apetece.com.br hp_ipiranga
+leandro.arronchi@apetece.com.br larronchi
+giovana.rosa@apetece.com.br grmarculo
+#davidson.gugias@apetece.com.br dvgugias
+fernanda.alves@apetece.com.br fasouza
+fernanda.souza@apetece.com.br fasouza
+priscila.spina@apetece.com.br pspina
+vera.alves@apetece.com.br vldmalves
+joao.mendes@apetece.com.br jlsmendes
+fabiana.floresterni@apetece.com.br ffloresterni
+#larissa.lopez@apetece.com.br llopez
+pt_compras@apetece.com.br pt_compras
+cozinha.tb@apetece.com.br tbs_cozinha
+pt_logistica@apetece.com.br pt_log
+marconde.silva@apetece.com.br mlsilva
+daiane.carvalho@apetece.com.br dccarvalho
+clinicas@apetece.com.br hp_clinicas
+clinicas_operacional@apetece.com.br hp_clinicas_op
+luciana.leme@apetece.com.br lfmleme
+flavia.garcia@apetece.com.br fccgarcia
+estoque_merenda_es@apetece.com.br apt_est_merenda_es
+#edson.silva@apetece.com.br evsnsilva
+erica.sarti@apetece.com.br esarti
+merenda_espiritosanto@apetece.com.br apt_merendaes
+#joao.santos@apetece.com.br jasrodrigues
+erica.gimenez@apetece.com.br fbtorquato
+gerencia@apetece.com.br apt_gerencia
+adriele.silva@apetece.com.br apt_compras
+#cristiane.nasario@apetece.com.br cznasario
+amanda.zanella@apetece.com.br azfcharif
+apoio_operacional@apetece.com.br apt_apope
+#cozinha_marfrig@apetece.com.br apt_marfrig
+#ara.velten@apetece.com.br lvelnten
+lucas.vieira@apetece.com.br sbendazzoli
+welvens.lima@apetece.com.br wolima
+gabriela.costa@apetece.com.br gdcosta
+#camila.grasseschi@apetece.com.br cgrasseschi
+vanessa.vassoler@apetece.com.br vvassoler
+carolina.coatti@apetece.com.br cacoatti
+#palmeiras@apetece.com.br palmeiras
+#bruno.santos@apetece.com.br bsantos
+#caism.sbc@apetece.com.br caismsbc
+#thais.santos@apetece.com.br tosantos
+reprogramacao@apetece.com.br apt_reprogramacao
+#joyce.rodrigues@apetece.com.br jdrodrigues
+daniela.piodesa@apetece.com.br dpiodesa
+dietas.osasco@apetece.com.br dietas.osasco
+patrulheiro.legumeria@apetece.com.br ptr.legumeria
+#maisa.santana@apetece.com.br mssantana
+#sheila.castro@apetece.com.br sfcastro
+paulo.boy@apetece.com.br pgboy
+#viviane.barbosa@apetece.com.br vmbarbosa
+psband@apetece.com.br psband
+pmdiadema@apetece.com.br pmdiadema
+elaine.pereira@apetece.com.br epereira
+#nutri.clinicas@apetece.com.br nclinica
+projeto.athena@apetece.com.br pathena
+ana.cajaiba@apetece.com.br apcajaiba
+augusto.mendes@apetece.com.br apt_comercial
+craisa@apetece.com.br apt_craisa
+pacomunicipal@apetece.com.br apt_pacomunicipal
+grupo.craisa@apetece.com.br apt_grupocraisa
+apoio.beatriz@apetece.com.br biaapoio
+gisele.moretti@apetece.com.br gmoretti
+ps.osasco@apetece.com.br ps.osasco
+supervisoras.merendasp@apetece.com.br apt_supervisoras.merendasp
+bruno.silva@apetece.com.br bcsantos
+patrulheiro.infra@apetece.com.br ptrinfra
+santa.marina@apetece.com.br apt_smarina
+dieta_clinicas@apetece.com.br dieta_clinicas
+bruno.mitsuo@apetece.com.br bmitsuo
+rafael.yamato@apetece.com.br ryamato
+leticia.santos@apetece.com.br ltcsantos
+paula.campos@apetece.com.br pmcampos
+#yamauchi@apetece.com.br apt_yamauchi
+flavio.batista@apetece.com.br fabatista
+tecnicas.tb@apetece.com.br tecnicas
+glaucia.coutinho@apetece.com.br gcoutinho
+karina.morais@apetece.com.br kmorais
+taise.costa@apetece.com.br trcosta
+#isaque.silva@apetece.com.br ibsilva
+ana.claudia@apetece.com.br apt_pcp
+leticia.sanches@apetece.com.br lrsanches
+andre.araujo@apetece.com.br alaraujo
+#tayara.zamboni@apetece.com.br tzamboni
+vanessa.mazetto@apetece.com.br vnmazetto
+#elizabeth.vigatto@apetece.com.br esvigatto
+leonardo.phelipe@apetece.com.br lphelipe
+marcia.santos@apetece.com.br mxsantos
+paulo.morais@apetece.com.br pvmorais
+#renata.carvalho@apetece.com.br rcarvalho
+rafael.souza@apetece.com.br rsouza
+patrulheiropcp01@apetece.com.br ptrpcp01
+patrulheiropcp02@apetece.com.br ptrpcp02
+victor.sampaio@apetece.com.br ravila
+samuel.bendazzoli@apetece.com.br sbendazzoli
+wyma@apetece.com.br apt_wyma
+paumar@apetece.com.br apt_paumar
+andre.avila@apetece.com.br ajavila
+spdm@apetece.com.br spdm
+patrulheiro.operacional01@apetece.com.br ptr_operacional01
+patrulheiro.operacional02@apetece.com.br ptr_operacional02
+#pscentral_nutriclinicas@apetece.com.br pscentral_nutriclinicas
+#silvio.costa@apetece.com.br ssncosta
+#fernando.bergamo@apetece.com.br fcrbergamo
+rotas.osasco@apetece.com.br rotas_osasco
+comercial.privado@apetece.com.br apt_comercialprivado 
+lilian.conceicao@apetece.com.br lsconceicao
+#dompedroii@apetece.com.br apt_dompedroii
+#bruna.weis@apetece.com.br bweis
+leila.lschoeder@apetece.com.br llschoeder
+visita.tecnica@apetece.com.br apt_visitatecnica
+fundacao@apetece.com.br apt_fundacao
+#gabriella.mrak@apetece.com.br gmrak
+jose.nobre@apetece.com.br jcnobre
+#jose.celso@apetece.com.br jcelso
+#rubia.albuquerque@apetece.com.br rcsfalbuquerque
+rubia.albuquerque@apetece.com.br lzani
+miriam.cassimiro@apetece.com.br mcassimiro
+jaqueline.rolemberg@apetece.com.br jrolemberg
+sabrina.valenciano@apetece.com.br sbvalenciano
+#lia.fratta@apetece.com.br lfratta
+adm.saboya@apetece.com.br adm_saboya
+tamiris.souza@apetece.com.br tnsouza
+vendas@apetece.com.br tbs_vendas
+adriana.ramos@apetece.com.br aramos
+claudia.terra@apetece.com.br jobarasoli
+#admilson.campos@apetece.com.br acampos
+rafael.andrade@apetece.com.br rsandrade
+multiplicadores@apetece.com.br apt_multiplicadores
+manuela.santos@apetece.com.br msantos
+suzana.santos@apetece.com.br svsantos
+nutri.hmu@apetece.com.br apt_nutri.hmu
+michele.gomes@apetece.com.br mgomes
+aline.zertus@apetece.com.br abzertus
+daniela.souza@apetece.com.br dsouza
+trainee@apetece.com.br apt_trainee
+beatriz.loures@apetece.com.br brloures
+agatha.souza@apetece.com.br afsouza
+miriam.baptista@apetece.com.br mlbaptista
+maiara.lima@apetece.com.br malima
+fernanda.torquato@apetece.com.br fbtorquato
+laila.souza@apetece.com.br lsouza
+operacoes@apetece.com.br apt_operacoes
+sos@apetece.com.br apt_sos
+sosoperacao@apetece.com.br apt_sosoperacao
+#bruno.vaz@apetece.com.br bvaz
+carolina.santos@apetece.com.br caasantos
+vivian.salazar@apetece.com.br acalves
+milleny.freire@apetece.com.br msfreire
+luciana.cavalheiro@apetece.com.br lcavalheiro
+presidente@apetece.com.br apt_presidente
+alice.marques@apetece.com.br agmarques
+lilian.correia@apetece.com.br lacorreia
+marcia.silva@apetece.com.br mcasilva
+home.doctor@apetece.com.br apt_homedoctor
+maria.carneiro@apetece.com.br macarneiro
+camila.baptista@apetece.com.br cmbaptista
+sergiane.costa@apetece.com.br smpcosta
+admincompany@apetece.com.br apt_admincompany
+cadastro@apetece.com.br apt_cadastro
+contratos@apetece.com.br apt_contratos
+estoque.heliopolis@apetece.com.br apt_estoqueheliopolis
+patrulheiro.logistica@apetece.com.br apt_ptrlogistica
+workflow@apetece.com.br apt_workflow
+ricardo.avila@apetece.com.br ravila
+galileo.tbsbc@apetece.com.br apt_galileo
+galileo.es@apetece.com.br apt_galileoes
+teste.zimbra@apetece.com.br apt_testezimbra
+sla@apetece.com.br apt_sla
+#ana.huggler@apetece.com.br ahugler
+portinari@apetece.com.br apt_portinari
+rodrigo.silva@apetece.com.br rjsilva
+#beatriz.alejandra@apetece.com.br balejandra
+daniel.souza@apetece.com.br dssouza
+patricia.simoes@apetece.com.br pmsimoes
+jacqueline.barasoli@apetece.com.br jobarasoli
+sandra.yamada@apetece.com.br syamada
+juliana.rodrigues@apetece.com.br jaarodrigues
+beatriz.marcon@apetece.com.br bfmarcon
+gestores@apetece.com.br apt_gestores
+marcella.loge@apetece.com.br mploge
+camila.novo@apetece.com.br cssnovo
+henrique.leao@apetece.com.br hxleao
+katia.giraldo@apetece.com.br krgiraldo
+legumeria@apetece.com.br apt_legumeria
+natalia.ribeiro@apetece.com.br nribeiro
+benteler@apetece.com.br apt_benteler
+adm.heliopolis@apetece.com.br apt_adm.heliopolis
+estoque.saboya@apetece.com.br apt_estoque.saboya
+dhl@apetece.com.br apt_dhl
+elis.moraes@apetece.com.br elmoraes
+aline.freitas@apetece.com.br arfreitas
+karen.mattioli@apetece.com.br kmattioli
+rosecler.goya@apetece.com.br regoya
+nutricionistas.saboya@apetece.com.br apt_nutri.saboya
+anna.loss@apetece.com.br asfloss
+claudia.mayumi@apetece.com.br cmyamada
+caps.itapeva@apetece.com.br apt_itapeva
+sara.cristine@apetece.com.br scseifert
+pscentral_fundacao@apetece.com.br apt_pscentral
+hc_fundacao@apetece.com.br apt_hc
+hmu_fundacao@apetece.com.br apt_hmu
+ana.huggler@apetece.com.br ccaramello
+adm.pscentral@apetece.com.br apt_adm.pscentral
+saudesbc@apetece.com.br apt_saude
+adm.hc@apetece.com.br apt_adm.hc
+adm.hmu@apetece.com.br apt_adm.hmu
+igor.carvalho@apetece.com.br ifcarvalho
+ps_perus@apetece.com.br apt_psperus
+crt_dst@apetece.com.br apt_crt
+danielle.vieira@apetece.com.br dvieira
+aline.paes@apetece.com.br apaes
+natacha.storcker@apetece.com.br nstorcker
+heloisa.rocco@apetece.com.br hrocco
+#centrodereferencia_dst@apetece.com.br crtdst
+nutri.hc@apetece.com.br apt_nutri.hc
+coordenadoria.sul@apetece.com.br apt_crssul
+cristina.caramello@apetece.com.br ccaramello
+estoque.hmu@apetece.com.br apt_estoque.hmu
+estoque.hc@apetece.com.br apt_estoque01.hc
+daniela.santos@apetece.com.br dsantos
+# 
+# Maros 
+# 
+#almir.santos@marosalimentacao.com.br alsantos
+#desenvolvimento.rh@marosalimentacao.com.br rh-maros
+#clientes@marosalimentacao.com.br maros_clientes
+comercial@marosalimentacao.com.br apt_comercial
+atendimento@marosalimentacao.com.br maros_atendimento
+#cozinha.tb@marosalimentacao.com.br tbs_cozinha
+#ipiranga@marosalimentacao.com.br hp_ipiranga
+#penteado@marosalimentacao.com.br hp_penteado
+#compras@marosalimentacao.com.br apt_compras
+#estoque@marosalimentacao.com.br apt_estoque
+nfe@marosalimentacao.com.br nfe_maros
+#unidades@marosalimentacao.com.br maros_unidade
+# 
+# Merenda 
+# 
+mirele.neves@apetece.com.br mpneves
+alessandra.barreira@apetece.com.br abarreira
+gustavo.carneiro@apetece.com.br gcarneiro
+bianca.silva@apetece.com.br bssilva
+carla.melo@apetece.com.br cbmelo
+samanta.gardini@apetece.com.br sgardini
+rita.oda@apetece.com.br rcoda
+#ana.gallo@apetece.com.br adgallo
+patricia.valino@apetece.com.br pvalino
+paula.nunes@apetece.com.br psnunes
+#tany.mastrochirico@apetece.com.br tbmastrochirico
+#erica.polli@apetece.com.br erpolli
+melissa.ribeiro@apetece.com.br moribeiro
+mayra.hyde@apetece.com.br mhyde
+karina.leopoldino@apetece.com.br kpleopoldino
+#magali.assumpcao@apetece.com.br mfassumpcao
+marcia.cavalcante@apetece.com.br mgcavalcante
+#andresa.moreira@apetece.com.br amoreira
+katia.bessa@apetece.com.br kbessa
+tatiana.silveira@apetece.com.br tssilveira
+joselma.rocha@apetece.com.br jrocha
+jackeline.duarte@apetece.com.br jduarte
+evelin.oliveira@apetece.com.br eoliveira
+#cintia.vieira@apetece.com.br ccbvieira
+linamar.marcuzzi@apetece.com.br lmarcuzzi
+daniela.domingos@apetece.com.br dndomingos
+andreia.bulbow@apetece.com.br acmcbulbow
+leonardo.duarte@apetece.com.br laduarte
+patricia.pinheiro@apetece.com.br pfpinheiro
+#leonardo.oliveira@apetece.com.br lcoliveira
+#marcus.januario@apetece.com.br mvjanuario
+luciana.filsner@apetece.com.br lfilsner
+cibele.tamborelli@apetece.com.br ctamborelli
+kelyne.morais@apetece.com.br kfmorais
+#domenica.verrone@apetece.com.br dlverrone
+#alessandra.vicentini@apetece.com.br avicentini
+#tatiana.alves@apetece.com.br talves
+#carla.novais@apetece.com.br cnovais
+#luana.honorio@apetece.com.br lhonorio
+#gabriela.oliveira@apetece.com.br gboliveira
+#debora.barros@apetece.com.br dbdeus
+bruna.mazuela@apetece.com.br bmazuela
+#flavia.shiosawa@apetece.com.br fshiosawa
+daniela.reis@apetece.com.br dreis
+bruno.antonio@apetece.com.br basilva
+#fabiana.francesco@apetece.com.br ffrancesco
+vanessa.oliveira@apetece.com.br vsoliveira
+#leticia.lopes@apetece.com.br lslopes
+#janaina.cella@apetece.com.br jfcella
+#bruna.queiroz@apetece.com.br bsqueiroz
+#nicole.camargo@apetece.com.br nrcamargo
+#fabiana.martin@apetece.com.br fmartin
+larissa.silva@apetece.com.br larsilva
+#sandra.pereira@apetece.com.br spereira
+#roberta.barreira@apetece.com.br rpbarreira
+#thaisy.schembri@apetece.com.br tschembri
+vanessa.pio@apetece.com.br vpio
+thaisy.simone@apetece.com.br tsimone
+wanessa.carvalho@apetece.com.br	wrcarvalho
+carla.felippe@apetece.com.br ccbfelippe
+simony.endlich@apetece.com.br sendlich
+# 
+# Merenda Itanhaem 
+# 
+#daniele.padovan@apetece.com.br dpribeiro
+daniela.belonio@apetece.com.br dacbelonia
+#karina.romano@apetece.com.br kglromano
+#patricia.rodrigues@apetece.com.br pmsrodrigues
+telma.freitas@apetece.com.br tsfreitas
+#joyce.serodio@apetece.com.br dpribeiro
+reiza.bolota@apetece.com.br rsbolota
+#lilian.menezes@apetece.com.br ldmenezes
+thiago.quintans@apetece.com.br tquintans
+#pamela.tofoli@apetece.com.br pcstofoli
+rafael.takemori@apetece.com.br mgomes
+cipa@apetece.com.br apt_cipa
+#antonio.hippolito@apetece.com.br ahippolito
+daniela.santoro@apetece.com.br dcsantoro
+#cicera.cordeiro@apetece.com.br cecordeiro
+#sheila.farrampa@apetece.com.br slfarrampa
+#melyssa.souza@apetece.com.br masouza
+merenda.itanhaem@apetece.com.br apt_merenda_itanhaem
+irine.souza@apetece.com.br iosouza
+natalia.santos@apetece.com.br nmsantos
+# 
+# Merenda Espirito Santo 
+# 
+ailton.oliveira@apetece.com.br aaoliveira
+rafael.marques@apetece.com.br rmarques
+claudia.silva@apetece.com.br cmsilva
+meirielle.santos@apetece.com.br mrbsantos
+perina.silva@apetece.com.br prsilva
+flavia.freitas@apetece.com.br ffreitas
+ana.barros@apetece.com.br acgbarros
+nicole.woelffel@apetece.com.br nwoelffel
+patricia.pagung@apetece.com.br pvpagung
+rosianny.freitas@apetece.com.br rhfreitas
+melila.oliveira@apetece.com.br moliveira
+karolline.gomes@apetece.com.br kfgomes
+mikele.guimaraes@apetece.com.br mguimaraes
+liusani.oliveira@apetece.com.br leoliveira
+maria.rosa@apetece.com.br mlrosa
+thais.damascena@apetece.com.br tdamascena
+cristina.vieira@apetece.com.br cdvieira
+christiana.pinheiro@apetece.com.br cnpinheiro
+giselly.nascimento@apetece.com.br gfnascimento
+geisiane.fonseca@apetece.com.br gofonseca
+lara.velten@apetece.com.br mguimaraes
+valdir.sousa@apetece.com.br vasousa
+infra-es@apetece.com.br apt_infra_es
+lorrayne.godoi@apetece.com.br lbgodoi
+layza.vettorazzi@apetece.com.br lvettorazzi
+bianka.toniato@apetece.com.br btoniato
+karina.santos@apetece.com.br kbsantos
+mariellen.lopes@apetece.com.br mmlopes
+helena.lopes@apetece.com.br hlopes
+kamilla.vieira@apetece.com.br krvieira
+enildo.moreira@apetece.com.br eamoreira
+natalia.cardoso@apetece.com.br nmcardoso
+camila.santos@apetece.com.br crsantos
+rodrigo.lopes@apetece.com.br rclopes
+eliedina.jesus@apetece.com.br esjesus
+rodrigo.carvalho@apetece.com.br rlcarvalho
+maria.bonno@apetece.com.br mpbonno
+#
+#Merenda Sorocaba
+#
+sos_operacao@apetece.com.br sos_operacao
+mariela.moreno@apetece.com.br mmoreno
+# 
+# Usuarios dominio apetece.net.br 
+# apenas para utilizacao interna 
+# 
+gtp@apetece.net.br apt_gtp
